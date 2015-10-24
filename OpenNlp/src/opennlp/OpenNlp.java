@@ -4,25 +4,20 @@
  * and open the template in the editor.
  */
 package opennlp;
-import opennlp.tools.postag.POSSample;
-import opennlp.tools.postag.POSModel;
-import opennlp.tools.postag.POSTaggerME;
-import opennlp.tools.util.Span;
-import opennlp.tools.util.ObjectStream;
-import opennlp.tools.namefind.NameFinderME;
-import opennlp.tools.namefind.TokenNameFinderModel;
+import opennlp.tools.parser.*;
+import opennlp.tools.cmdline.parser.ParserTool;
+import opennlp.tools.parser.ParserFactory;
+
 //import com.asprise.util.pdf.PDFReader;
 import opennlp.tools.sentdetect.SentenceDetectorME;
 import opennlp.tools.sentdetect.SentenceModel;
 import java.io.*;
-import opennlp.tools.cmdline.PerformanceMonitor;
-import opennlp.tools.tokenize.WhitespaceTokenizer;
-import opennlp.tools.cmdline.postag.POSModelLoader;
-import opennlp.tools.util.PlainTextByLineStream;
+
 /**
  *
  * @author Chirag
  */
+
 public class OpenNlp {
 
     /**
@@ -36,7 +31,7 @@ public class OpenNlp {
   // always start with a model, a model is learned from training dataru
                try
                {    
-                String[] Rule={"VB->DT->NN","VBN->IN->DT","VBN->NNP->IN","VB->NN,JJ->NNS","VB->IN->DT->NN","NNP->VBD->RP->TO->DT->NN","VB->PRP->DT->NN"};  
+                String[] Rule={"VP->VBG,NP,NN","VP->VBD,VP","VP->VBC","VP->VB,NP","VP->VBD,NP","VP->VBD","VP->VBN","NP->NNS","VP->VB,PP","VP->VB,NP","VB->VBD","VP->VBZ","VP->VBP,NP"};  
                 InputStream is = new FileInputStream("en-sent.zip");
                 SentenceModel model = new SentenceModel(is);
                 SentenceDetectorME sdetector = new SentenceDetectorME(model);
@@ -48,111 +43,27 @@ public class OpenNlp {
                 String sentences[] = sdetector.sentDetect(paragraph);
                 for(int j=0;j<sentences.length;j++)
                 {
-                    System.out.println(sentences[j]);
-                     InputStream is1 = new FileInputStream("en-ner-person.zip");
-                    TokenNameFinderModel model1 = new TokenNameFinderModel(is1);
-                    is1.close();
-                    NameFinderME nameFinder = new NameFinderME(model1);
-                    String sample[]=sentences[j].split(" ");
-                    Span nameSpans[] = nameFinder.find(sample);
-                    for(Span s: nameSpans)
-			System.out.println("Name:"+s.toString());	
-                    POSModel model2 = new POSModelLoader()
-                    .load(new File("en-pos-maxent.zip"));
-                    PerformanceMonitor perfMon = new PerformanceMonitor(System.err, "sent");
-                    POSTaggerME tagger = new POSTaggerME(model2);
+                   System.out.println(sentences[j]);
+                    InputStream is2 = new FileInputStream("en-parser-chunking.zip");
  
-                       
-                    ObjectStream<String> lineStream = new PlainTextByLineStream(
-			new StringReader(sentences[j]));
+                        ParserModel model1 = new ParserModel(is2);
  
-                   //perfMon.start();
-                    String line;
-                    while ((line = lineStream.read()) != null) {
-                        
-                        String whitespaceTokenizerLine[] = WhitespaceTokenizer.INSTANCE
-				.tokenize(line);
-                        String[] tags = tagger.tag(whitespaceTokenizerLine);
+                                Parser parser = ParserFactory.create(model1);
  
-                        POSSample sample2 = new POSSample(whitespaceTokenizerLine, tags);
-                        System.out.println(sample2.toString());
-                           String activity=null;
-        String[] sample1=sample2.toString().split(" ");
-        int i;
-        for(i=0;i<Rule.length;i++)
-        {
-        String[] indRule=null;
-        if(Rule[i].contains("->"))
-        {
-            indRule=Rule[i].split("->");
-        }
-        else
-        {
-            indRule=new String[1];
-            indRule[0]=Rule[i];
-        }
-        int term=0;
-        int ruleLen=0;
-        int firstMatch=0;
-        while(term<sample1.length)
-        {
-            String[] posWord=sample1[term].split("_");
-             if(ruleLen==indRule.length)
-             {
-                 System.out.println("Activity:......"+activity);
-                 activity=null;
-                 ruleLen=0;
-                 firstMatch=0;
-             }
-               
-            if(posWord[1].matches(indRule[ruleLen]))
-            {
-                if(firstMatch==0)
-                {
-                    firstMatch=1;
-                    activity=posWord[0];
-                   // System.out.println(posWord[0]);
-                    ruleLen++;
-                }
-                else
-                {
-                     activity=activity+" "+posWord[0];
-                     ruleLen++;
-                     // System.out.println(posWord[0]);
-                } 
-                //System.out.println(activity);
-                 term++;
-            }
-            else
-            {
-                //if(activity!=null)
-                  //  System.out.println(activity);
-                if(firstMatch==1)
-                {    
-                    firstMatch=0;
-                    activity=null;
-                ruleLen=0;
+                                 Parse topParses[] = ParserTool.parseLine(sentences[j], parser, 1);
+                                 Parse[] temp=null;
+                            for (Parse p : topParses)
+                            {
+                                p.show();
+                               traverse(p);
+                            }
+	                    is2.close();
 
-                }
-                else
-                {
-                    activity=null;
-                    ruleLen=0;
-                    term++;
-                }
-                
-            }
-                    
-        }
-        
-    } 
-                         
-		//perfMon.incrementCounter();
-	}
 	//perfMon.stopAndPrintFinalResult();
 
                 }
                 }
+                is.close();
                }
                
                catch(Exception Ex)
@@ -160,7 +71,94 @@ public class OpenNlp {
                    System.out.println(Ex.getMessage());
                }  
     }          
+
+    private static void traverse(Parse head) {
+       
+        if(head==null)
+            return;
+                 
+        Parse[] temp1=head.getChildren();
+                 
+                for(int j2=0;j2<temp1.length;j2++)
+                {
+                 //String[] rules= {"VP->VBG,VP,NN","VP->VBC","VP->VB,NP","VP->VBD,NP","VP->VBD","NP->NNS","VP->VB,PP","VP->VB,NP","VB->VBD,","VP->VBZ"};  
+                    String[] rules= {"VP->VBG,NP,NN","VP->VB,PP","VP->VBD,NP","VP->VBD","VP->VBP","VP->VBZ,PP","VP->VBZ,NP","VP->VBG","VP->VB,NP","VP->VBG,PP","VP->VBD,NP","VP->VBZ,NP","VP->VB,NP","PP->IN","VP->VBG,NP","VP->VBG","VP->VBD","VP->VB"};
+                    for(int rulelen=0;rulelen<rules.length;rulelen++)
+                    {
+                        String[] temp= rules[rulelen].split("->");
+                        if(head.getType().matches(temp[0]))
+                        { 
+                            String[] rule=null;
+                            int i=0;
+                            int j=0;
+                            String activity=null;
+                            if(temp[1].contains(",")) 
+                            {
+                                rule=temp[1].split(",");
+                            }
+                            else
+                            {
+                            rule=new String[1];
+                            rule[0]=temp[1];
+                            }
+                     //  System.out.println(temp[1]);
+                            int firstMatch=0;
+                            while(i<temp1.length)
+                            {   if(j==rule.length)
+                                {
+                                    j=0;
+                                    firstMatch=0;
+                                    activity=null;
+                                }
+                                if(temp1[i].getType().matches(rule[j]))
+                                {
+                                    if(activity==null && firstMatch==0)
+                                    {
+                                        
+                                        activity=temp1[i].toString();
+                                        firstMatch=1;
+                                    }
+                                    else
+                                    {
+                                        
+                                        activity=activity+" "+temp1[i].toString();
+                                    }
+                                    j++;
+                                }
+                                else
+                                {
+                                    j=0;
+                                    activity=null;
+                                    firstMatch=0;
+                                }
+                                i++;
+                            }
+                            if(activity != null)
+                            {
+                                System.out.println("Activity:"+activity);
+                                return;
+                            }
+                        }
+                    
+                       
+                   }
+                   
+                   //System.out.println("Children Parse Tree Nodes:"+temp1[j2].getType()+" "+temp1[j2].toString());
+                    traverse(temp1[j2]);   
+                    
+                }
+                 
+                
+                
+                    
+                   // traverse(temp1[1]);
+                } 
+            
+        
     }
+
+   
+    
 
     
     /**
